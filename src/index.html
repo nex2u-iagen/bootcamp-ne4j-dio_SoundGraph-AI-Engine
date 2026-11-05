@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SoundGraph - Recomendações Inteligentes</title>
+    <style>
+        :root { --bg: #f8fafc; --card: #ffffff; --primary: #0f172a; --accent: #2563eb; --text: #334155; --border: #e2e8f0; }
+        body { font-family: system-ui, sans-serif; background: var(--bg); padding: 2rem; max-width: 800px; margin: 0 auto; color: var(--text); line-height: 1.5; }
+        .card { background: var(--card); padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 1.5rem; }
+        .tabs { display: flex; gap: 1rem; border-bottom: 2px solid var(--border); margin-bottom: 1.5rem; }
+        .tab { padding: 0.75rem 1.5rem; cursor: pointer; font-weight: 600; color: #64748b; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+        .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        input, select { padding: 0.9rem; margin: 0.5rem 0; width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid var(--border); background-color: #fff; }
+        button { width: 100%; padding: 1rem; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; margin-top: 1rem; }
+        button:hover { background: #1e293b; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .rec-item { padding: 1.2rem; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1rem; }
+        .rec-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; }
+        .artist-name { font-size: 1.1rem; font-weight: 700; color: var(--primary); }
+        .match-badge { font-weight: 800; color: var(--accent); }
+        .progress-bg { width: 100%; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 0.8rem; }
+        .progress-fill { height: 100%; background: var(--accent); transition: width 0.5s ease-in-out; }
+
+        /* Estilos Base e de Destaque para as Tags (Explainable AI) */
+        .tags { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .tag { background: #f1f5f9; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 6px; border: 1px solid var(--border); color: var(--text); transition: all 0.2s ease; }
+        /* A classe tag-match aplica o destaque verde para afinidades confirmadas */
+        .tag-match { background-color: #dcfce7; color: #166534; border-color: #bbf7d0; font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+
+        .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 1rem; background: var(--bg); border-radius: 8px; border: 1px solid var(--border); margin-bottom: 1.5rem; }
+        .profile-item span { display: block; font-size: 0.8rem; color: #64748b; font-weight: bold; text-transform: uppercase; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>🎵 SoundGraph AI</h2>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('existente')">Utilizador Existente</div>
+            <div class="tab" onclick="switchTab('novo')">Novo Utilizador (Cold Start)</div>
+        </div>
+
+        <div id="form-existente">
+            <input type="number" id="listenerId" placeholder="ID do Utilizador (Ex: 10)" onkeypress="if(event.key==='Enter') getRecsExistente()">
+            <button onclick="getRecsExistente()">Analisar Perfil & Recomendar</button>
+        </div>
+
+        <div id="form-novo" class="hidden">
+            <div class="grid-2">
+                <select id="top_genre"><option value="">Selecione o Género...</option></select>
+                <select id="top_mood"><option value="">Selecione o Humor...</option></select>
+                <select id="country"><option value="">Selecione o País...</option></select>
+                <select id="age_group"><option value="">Selecione a Faixa Etária...</option></select>
+            </div>
+            <button onclick="getRecsNovo()">Descobrir Afinidades</button>
+        </div>
+
+        <div id="status" style="margin-top: 1rem; color: var(--accent); font-weight: 500;"></div>
+    </div>
+
+    <div class="card hidden" id="profileCard">
+        <h3>👤 Perfil do Utilizador</h3>
+        <div class="profile-grid" id="profileData"></div>
+    </div>
+
+    <div class="card hidden" id="recsCard">
+        <h3>✨ Inteligência Algorítmica</h3>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", async () => {
+            try {
+                const res = await fetch('/metadata/form');
+                const data = await res.json();
+                populateSelect('top_genre', data.genres);
+                populateSelect('top_mood', data.moods);
+                populateSelect('country', data.countries);
+                populateSelect('age_group', data.age_groups);
+            } catch(e) { console.error("Erro ao carregar opções do servidor:", e); }
+        });
+
+        function populateSelect(elementId, items) {
+            const select = document.getElementById(elementId);
+            items.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item;
+                option.textContent = item;
+                select.appendChild(option);
+            });
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('form-existente').classList.add('hidden');
+            document.getElementById('form-novo').classList.add('hidden');
+            document.getElementById('form-' + tabId).classList.remove('hidden');
+
+            document.getElementById('profileCard').classList.add('hidden');
+            document.getElementById('recsCard').classList.add('hidden');
+            document.getElementById('status').innerText = '';
+        }
+
+        // Função de renderização agora recebe os "userTraits" (características do utilizador)
+        function renderResults(data, userTraits = []) {
+            const resultsDiv = document.getElementById('results');
+            let html = '';
+
+            data.forEach((rec, idx) => {
+                // Lógica de Highlight: Cruza as tags do artista com os gostos do utilizador
+                const tagsHtml = rec.tags && rec.tags.length > 0
+                    ? rec.tags.map(t => {
+                        // Verifica se a etiqueta atual corresponde a alguma seleção do utilizador
+                        const isMatch = userTraits.includes(t);
+                        const highlightClass = isMatch ? 'tag-match' : '';
+                        return `<span class="tag ${highlightClass}">🏷️ ${t}</span>`;
+                    }).join('')
+                    : '<span class="tag" style="opacity: 0.5;">Sem tags</span>';
+
+                const isPercentage = rec.match_percentage !== null && rec.match_percentage !== undefined;
+                const scoreValue = isPercentage ? rec.match_percentage : rec.score;
+                const scoreLabel = isPercentage ? `${scoreValue}% Match` : `Força: ${scoreValue}`;
+                const barHtml = isPercentage
+                    ? `<div class="progress-bg"><div class="progress-fill" style="width: ${scoreValue}%"></div></div>`
+                    : '';
+
+                html += `
+                    <div class="rec-item">
+                        <div class="rec-header">
+                            <span class="artist-name">${idx + 1}. ${rec.name}</span>
+                            <span class="match-badge">${scoreLabel}</span>
+                        </div>
+                        ${barHtml}
+                        <div class="tags">${tagsHtml}</div>
+                    </div>
+                `;
+            });
+
+            resultsDiv.innerHTML = html;
+            document.getElementById('recsCard').classList.remove('hidden');
+            document.getElementById('status').innerText = '';
+        }
+
+        async function getRecsExistente() {
+            const id = document.getElementById('listenerId').value;
+            if(!id) return alert('Por favor, insira um ID de ouvinte válido.');
+
+            document.getElementById('profileCard').classList.add('hidden');
+            document.getElementById('recsCard').classList.add('hidden');
+            document.getElementById('status').innerText = '⏳ A analisar topologia do grafo...';
+
+            try {
+                const profileRes = await fetch(`/user/${id}`);
+                if (!profileRes.ok) throw new Error('Utilizador não encontrado na base de dados.');
+                const user = await profileRes.json();
+
+                document.getElementById('profileData').innerHTML = `
+                    <div class="profile-item"><span>Género | Humor</span><strong>${user.top_genre} / ${user.top_mood}</strong></div>
+                    <div class="profile-item"><span>País | Idade</span><strong>${user.country} (${user.age} anos)</strong></div>
+                `;
+                document.getElementById('profileCard').classList.remove('hidden');
+
+                const recsRes = await fetch(`/recommend/${id}`);
+                if (!recsRes.ok) throw new Error('Nenhuma recomendação cruzada encontrada para este perfil.');
+
+                // Passa o género e humor do utilizador para destacar as tags correspondentes
+                const recsData = await recsRes.json();
+                renderResults(recsData, [user.top_genre, user.top_mood]);
+
+            } catch(e) { document.getElementById('status').innerText = '❌ ' + e.message; }
+        }
+
+        async function getRecsNovo() {
+            const payload = {
+                top_genre: document.getElementById('top_genre').value || "",
+                top_mood: document.getElementById('top_mood').value || "",
+                country: document.getElementById('country').value || "",
+                age_group: document.getElementById('age_group').value || ""
+            };
+
+            if (!payload.top_genre || !payload.top_mood || !payload.country || !payload.age_group) {
+                return alert('Para formarmos a sua tribo com precisão, preencha as 4 características obrigatórias.');
+            }
+
+            document.getElementById('profileCard').classList.add('hidden');
+            document.getElementById('recsCard').classList.add('hidden');
+            document.getElementById('status').innerText = '⏳ A triangular vizinhanças e calcular afinidades...';
+
+            try {
+                const res = await fetch('/recommend/new', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.status === 422) {
+                    const errorData = await res.json();
+                    throw new Error('Formato de dados rejeitado pelo servidor. Assegure-se de que selecionou todas as opções.');
+                }
+
+                if (!res.ok) {
+                    const errorData = await res.json();
+                    throw new Error(errorData.detail || 'Não foi possível encontrar uma tribo baseada nessas características.');
+                }
+
+                // Extrai os valores submetidos para o motor de destaque visual
+                const userTraits = Object.values(payload);
+                const recsData = await res.json();
+                renderResults(recsData, userTraits);
+
+            } catch(e) {
+                document.getElementById('status').innerText = '❌ ' + e.message;
+            }
+        }
+    </script>
+</body>
+</html>

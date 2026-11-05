@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  meu-neo4j:
+    image: neo4j:5.20.0-community
+    container_name: neo4j_musica
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/minhasenha123
+      - NEO4J_apoc_import_file_enabled=true
+    volumes:
+      - ./data:/data:z
+      - ./import:/var/lib/neo4j/import:z
